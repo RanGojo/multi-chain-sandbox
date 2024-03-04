@@ -5,7 +5,7 @@ import { DARK_GRAY, GRAY, PURPLE, REACT_GRAY, WHITE } from '../../constants';
 import { hexToRGB } from '../../utils';
 import Button from '../Button';
 import { ConnectedAccounts, ConnectedMethods } from '../../App';
-import { SupportedChainIcons, SupportedChainNames, SupportedEVMChainIds } from '../../types';
+import { SupportedChainIcons, SupportedChainNames } from '../../types';
 
 // =============================================================================
 // Styled Components
@@ -60,9 +60,9 @@ const Link = styled.a.attrs({
   }
 `;
 
-const Subtitle = styled.h5`
+const Subtitle = styled.h3`
   color: ${GRAY};
-  font-weight: 400;
+  font-weight: 500;
 `;
 
 const Pre = styled.pre`
@@ -184,9 +184,9 @@ const Sidebar = React.memo((props: Props) => {
     <Main>
       <Body>
         <Link>
-          <img src="https://phantom.app/img/phantom-logo.svg" alt="Phantom" width="200" />
-          <Subtitle>Multi-chain Sandbox</Subtitle>
+          <Subtitle>Multi-chain Sandbox (Phantom + Rango)</Subtitle>
         </Link>
+        <br />
         {connectedAccounts?.solana ? (
           // connected
           <>
@@ -208,49 +208,11 @@ const Sidebar = React.memo((props: Props) => {
             </div>
             <ChainHeader>
               <ChainIcon
-                src={SupportedChainIcons.Ethereum}
-                height="16px"
-                style={{ marginRight: '6px', borderRadius: '6px' }}
-              />
-              <Tag>{SupportedChainNames.EthereumGoerli}</Tag>
-            </ChainHeader>
-            {connectedMethods
-              .filter((method) => method.chain === 'ethereum')
-              .map((method, i) => (
-                <Button
-                  data-test-id={`ethereum-goerli-${method.name}`}
-                  key={`${method.name}-${i}`}
-                  onClick={() => method.onClick(SupportedEVMChainIds.EthereumGoerli)}
-                >
-                  {method.name}
-                </Button>
-              ))}
-            <ChainHeader>
-              <ChainIcon
-                src={SupportedChainIcons.Polygon}
-                height="16px"
-                style={{ marginRight: '6px', borderRadius: '6px' }}
-              />
-              <Tag>{SupportedChainNames.PolygonMumbai}</Tag>
-            </ChainHeader>
-            {connectedMethods
-              .filter((method) => method.chain === 'ethereum')
-              .map((method, i) => (
-                <Button
-                  data-test-id={`polygon-mumbai-${method.name}`}
-                  key={`${method.name}-${i}`}
-                  onClick={() => method.onClick(SupportedEVMChainIds.PolygonMumbai)}
-                >
-                  {method.name}
-                </Button>
-              ))}
-            <ChainHeader>
-              <ChainIcon
                 src={SupportedChainIcons.Solana}
                 height="16px"
                 style={{ marginRight: '6px', borderRadius: '6px' }}
               />
-              <Tag>{SupportedChainNames.SolanaDevnet}</Tag>
+              <Tag>{SupportedChainNames.SolanaMainnet}</Tag>
             </ChainHeader>
             {connectedMethods
               .filter((method) => method.chain === 'solana')
@@ -274,6 +236,8 @@ const Sidebar = React.memo((props: Props) => {
           ❤️
         </span>{' '}
         by the <a href="https://phantom.app">Phantom</a> team
+        <br/>
+        Modified by <a href="https://rango.exchange">Rango</a> to include Rango SDK and Singer Samples
       </Tag>
     </Main>
   );

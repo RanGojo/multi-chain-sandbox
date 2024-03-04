@@ -5,27 +5,22 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
-import { clusterApiUrl, Connection, PublicKey } from '@solana/web3.js';
+import { PublicKey } from '@solana/web3.js';
 
 import {
-  createTransferTransactionV0,
   detectPhantomMultiChainProvider,
-  getChainName,
-  pollEthereumTransactionReceipt,
-  pollSolanaSignatureStatus,
-  sendTransactionOnEthereum,
-  signAndSendTransactionOnSolana,
-  signMessageOnEthereum,
   signMessageOnSolana,
 } from './utils';
 
-import { PhantomInjectedProvider, SupportedEVMChainIds, TLog } from './types';
+import { PhantomInjectedProvider, TLog } from './types';
 
 import { Logs, NoProvider, Sidebar } from './components';
 import { connect, silentlyConnect } from './utils/connect';
 import { setupEvents } from './utils/setupEvents';
-import { ensureEthereumChain } from './utils/ensureEthereumChain';
 import { useEthereumSelectedAddress } from './utils/getEthereumSelectedAddress';
+import { RangoClient, SwapResponse as RangoSwap } from 'rango-sdk-basic';
+import { RANGO_API_KEY, SOLANA, SOLANA_SOL, SOLANA_USDC, SOL_DECIMALS, signAndSendTransaction, swapToString } from './rango';
+import BigNumber from 'bignumber.js';
 
 // =============================================================================
 // Styled Components
@@ -39,16 +34,6 @@ const StyledApp = styled.div`
     flex-direction: column;
   }
 `;
-
-// =============================================================================
-// Constants
-// =============================================================================
-
-const solanaNetwork = clusterApiUrl('devnet');
-// NB: This URL will only work for Phantom sandbox apps! Please do not use this for your project. If you are running this locally we recommend using one of Solana's public RPC endpoints
-// const solanaNetwork = 'https://phantom-phantom-f0ad.mainnet.rpcpool.com/';
-const connection = new Connection(solanaNetwork);
-const message = 'To avoid digital dognappers, sign below to authenticate with CryptoCorgis.';
 
 // =============================================================================
 // Typedefs
@@ -86,9 +71,10 @@ interface Props {
  * @DEVELOPERS
  * The fun stuff!
  */
-const useProps = (provider: PhantomInjectedProvider | null): Props => {
+const useProps = (provider: PhantomInjectedProvider | null, rango: RangoClient): Props => {
   /** Logs to display in the Sandbox console */
   const [logs, setLogs] = useState<TLog[]>([]);
+  const [rangoSwap, setRangoSwap] = useState<RangoSwap | null>(null);
 
   const createLog = useCallback(
     (log: TLog) => {
@@ -125,91 +111,15 @@ const useProps = (provider: PhantomInjectedProvider | null): Props => {
     await connect({ solana, ethereum }, createLog);
 
     // Immediately switch to Ethereum Goerli for Sandbox purposes
-    await ensureEthereumChain(ethereum, SupportedEVMChainIds.EthereumGoerli, createLog);
+    // await ensureEthereumChain(ethereum, SupportedEVMChainIds.EthereumGoerli, createLog);
   }, [provider, createLog]);
-
-  /** SignAndSendTransaction via Solana Provider */
-  const handleSignAndSendTransactionOnSolana = useCallback(async () => {
-    if (!provider) return;
-    const { solana } = provider;
-    try {
-      // create a v0 transaction
-      const transactionV0 = await createTransferTransactionV0(solana.publicKey, connection);
-      createLog({
-        providerType: 'solana',
-        status: 'info',
-        method: 'signAndSendTransaction',
-        message: `Requesting signature for ${JSON.stringify(transactionV0)}`,
-      });
-      // sign and submit the transaction via Phantom
-      const signature = await signAndSendTransactionOnSolana(solana, transactionV0);
-      createLog({
-        providerType: 'solana',
-        status: 'info',
-        method: 'signAndSendTransaction',
-        message: `Signed and submitted transaction ${signature}.`,
-      });
-      // poll tx status until it is confirmed or 30 seconds pass
-      pollSolanaSignatureStatus(signature, connection, createLog);
-    } catch (error) {
-      createLog({
-        providerType: 'solana',
-        status: 'error',
-        method: 'signAndSendTransaction',
-        message: error.message,
-      });
-    }
-  }, [provider, createLog]);
-
-  /**
-   * Switch Ethereum Chains
-   * When a user connects to a dApp, Phantom considers them connected on all chains
-   * When the Ethereum provider's chainId is changed, Phantom will not prompt the user for approval
-   * */
-  const isEthereumChainIdReady = useCallback(
-    async (chainId: SupportedEVMChainIds) => {
-      if (!provider) return false;
-      const { ethereum } = provider;
-      return await ensureEthereumChain(ethereum, chainId, createLog);
-    },
-    [provider, createLog]
-  );
-
-  /** SendTransaction via Ethereum Provider */
-  const handleSendTransactionOnEthereum = useCallback(
-    async (chainId) => {
-      // set ethereum provider to the correct chainId
-      const ready = await isEthereumChainIdReady(chainId);
-      if (!ready) return;
-      const { ethereum } = provider;
-      try {
-        // send the transaction up to the network
-        const txHash = await sendTransactionOnEthereum(ethereum);
-        createLog({
-          providerType: 'ethereum',
-          status: 'info',
-          method: 'eth_sendTransaction',
-          message: `Sending transaction ${txHash} on ${chainId ? getChainName(chainId) : 'undefined'}`,
-        });
-        // poll tx status until it is confirmed in a block, fails, or 30 seconds pass
-        pollEthereumTransactionReceipt(txHash, ethereum, createLog);
-      } catch (error) {
-        createLog({
-          providerType: 'ethereum',
-          status: 'error',
-          method: 'eth_sendTransaction',
-          message: error.message,
-        });
-      }
-    },
-    [provider, createLog, isEthereumChainIdReady]
-  );
 
   // /** SignMessage via Solana Provider */
   const handleSignMessageOnSolana = useCallback(async () => {
     if (!provider) return;
     const { solana } = provider;
     try {
+      const message = 'To avoid digital dognappers, sign below to authenticate with CryptoCorgis.';
       const signedMessage = await signMessageOnSolana(solana, message);
       createLog({
         providerType: 'solana',
@@ -228,33 +138,77 @@ const useProps = (provider: PhantomInjectedProvider | null): Props => {
     }
   }, [provider, createLog]);
 
-  /** SignMessage via Ethereum Provider */
-  const handleSignMessageOnEthereum = useCallback(
-    async (chainId) => {
-      // set ethereum provider to the correct chainId
-      const ready = await isEthereumChainIdReady(chainId);
-      if (!ready) return;
-      const { ethereum } = provider;
-      try {
-        const signedMessage = await signMessageOnEthereum(ethereum, message);
-        createLog({
-          providerType: 'ethereum',
-          status: 'success',
-          method: 'personal_sign',
-          message: `Message signed: ${signedMessage}`,
-        });
-        return signedMessage;
-      } catch (error) {
-        createLog({
-          providerType: 'ethereum',
-          status: 'error',
-          method: 'personal_sign',
-          message: error.message,
-        });
-      }
-    },
-    [provider, createLog, isEthereumChainIdReady]
-  );
+  const handleGetRangoQuote = useCallback(async () => {
+    if (!provider?.solana) return;
+    const { solana } = provider;
+    createLog({
+      providerType: 'rango',
+      status: 'info',
+      method: 'swap',
+      message: `Requesting Rango Swap API for a sample Solana route ${solana.publicKey}`,
+    })
+    const wallet = solana.publicKey.toString()
+    const input_amount = "0.0001"
+    const machine_amount = new BigNumber(input_amount).shiftedBy(SOL_DECIMALS).toString()
+    const swap = await rango.swap({
+      from: SOLANA_SOL,
+      to: SOLANA_USDC,
+      amount: machine_amount,
+      slippage: "3",
+      fromAddress: wallet,
+      toAddress: wallet,
+      disableEstimate: true,
+    })
+    const message = `Route Status: ${swap.resultType}, TX: ${swap.tx ? "OK": "-"}`
+    const detail = swapToString(swap, input_amount)
+    setRangoSwap(swap);
+    createLog({
+      providerType: 'rango',
+      status: swap.resultType === "OK" ? 'success' : 'error',
+      method: 'swap',
+      message: message,
+      messageTwo: detail,
+    })
+  }, [createLog, provider, rango, setRangoSwap]);
+
+  const handleSignAndSendRangoSolanaTransaction = useCallback(async () => {
+    if (!provider?.solana) return;
+    if (!rangoSwap?.tx) {
+      createLog({
+        providerType: 'rango',
+        status: 'error',
+        method: 'signAndSendTransaction',
+        message: `Please get a "Sample Solana Swap" first`,
+      })
+      return
+    }
+    const { solana } = provider;
+    createLog({
+      providerType: 'rango',
+      status: 'info',
+      method: 'signAndSendTransaction',
+      message: `Trying to sign and send recent transaction`,
+    })
+    try {
+      if (rangoSwap.tx.type !== SOLANA)
+        throw Error("Unexpected tx type.")
+      const signature = await signAndSendTransaction(rangoSwap.tx, solana)
+      createLog({
+        providerType: 'solana',
+        status: 'success',
+        method: 'signAndSendTransaction',
+        message: `Signed and submitted transaction ${signature}.`,
+      });
+    } catch (error) {
+      createLog({
+        providerType: 'solana',
+        status: 'error',
+        method: 'signAndSendTransaction',
+        message: error.message,
+      });
+    }
+  }, [createLog, provider, rangoSwap]);
+
 
   /**
    * Disconnect from Solana
@@ -281,23 +235,18 @@ const useProps = (provider: PhantomInjectedProvider | null): Props => {
     return [
       {
         chain: 'solana',
-        name: 'Sign and Send Transaction',
-        onClick: handleSignAndSendTransactionOnSolana,
-      },
-      {
-        chain: 'ethereum',
-        name: 'Send Transaction',
-        onClick: handleSendTransactionOnEthereum,
-      },
-      {
-        chain: 'solana',
         name: 'Sign Message',
         onClick: handleSignMessageOnSolana,
       },
       {
-        chain: 'ethereum',
-        name: 'Sign Message',
-        onClick: handleSignMessageOnEthereum,
+        chain: 'solana',
+        name: 'Sample Solana Swap (Rango)',
+        onClick: handleGetRangoQuote,
+      },
+      {
+        chain: 'solana',
+        name: 'Sign and Send Solana Transaction (Rango)',
+        onClick: handleSignAndSendRangoSolanaTransaction,
       },
       {
         chain: 'solana',
@@ -306,10 +255,9 @@ const useProps = (provider: PhantomInjectedProvider | null): Props => {
       },
     ];
   }, [
-    handleSignAndSendTransactionOnSolana,
-    handleSendTransactionOnEthereum,
     handleSignMessageOnSolana,
-    handleSignMessageOnEthereum,
+    handleGetRangoQuote,
+    handleSignAndSendRangoSolanaTransaction,
     handleDisconnect,
   ]);
 
@@ -346,7 +294,8 @@ const StatelessApp = React.memo((props: Props) => {
 
 const App = () => {
   const [provider, setProvider] = useState<PhantomInjectedProvider | null>(null);
-  const props = useProps(provider);
+  const rango = new RangoClient(RANGO_API_KEY)
+  const props = useProps(provider, rango);
 
   useEffect(() => {
     const getPhantomMultiChainProvider = async () => {

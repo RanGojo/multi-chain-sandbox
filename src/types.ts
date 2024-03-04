@@ -74,10 +74,11 @@ export type PhantomEvent = EthereumEvent | SolanaEvent;
 
 export type Status = 'success' | 'warning' | 'error' | 'info';
 
+export type RangoLogMethod = 'quote' | 'swap';
 export interface TLog {
-  providerType: PhantomProviderType;
+  providerType: PhantomProviderType | 'rango';
   status: Status;
-  method?: PhantomRequestMethod | Extract<PhantomEvent, 'accountChanged' | 'accountsChanged' | 'chainChanged'>;
+  method?: PhantomRequestMethod | Extract<PhantomEvent, 'accountChanged' | 'accountsChanged' | 'chainChanged'> | RangoLogMethod;
   message: string;
   messageTwo?: string;
 }
