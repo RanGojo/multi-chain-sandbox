@@ -27,16 +27,11 @@ export async function signAndSendTransaction(tx: SolanaTransaction, solana: Phan
       }
     }
     const finalTx: Transaction | VersionedTransaction = transaction || versionedTransaction;
-    if (!finalTx) {
-        throw new Error('error creating transaction');
-    }
-    console.log({finalTx})
-    const raw = await solana.signTransaction(finalTx);
-    const signature = await connection.sendRawTransaction(raw.serialize())
-    if (!signature)
-        throw new Error('tx cant send to blockchain. signature=' + signature);
-    const confirmed = await connection.confirmTransaction(signature);
-    if (!confirmed)
-      throw new Error('tx cant confirm on blockchain. signature=' + signature);
+    if (!finalTx) 
+      throw new Error('Error creating transaction');
+    console.log({ finalTx })
+    const { signature } = await solana.signAndSendTransaction(finalTx, { preflightCommitment: 'confirmed' });
+    const status = await connection.getSignatureStatus(signature);
+    console.log({ status })
     return signature;
 }
